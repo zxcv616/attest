@@ -10,12 +10,15 @@
     "build": "tsc -p tsconfig.json",
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "node --experimental-strip-types src/index.ts"
+    "dev": "node --experimental-strip-types src/index.ts",
+    "mcp": "node --experimental-strip-types src/mcp-entry.ts"
   },
   "dependencies": {
     "@attest/schemas": "0.0.0",
     "ws": "^8.18.0",
-    "ulid": "^2.3.0"
+    "ulid": "^2.3.0",
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
