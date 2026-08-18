@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attest.dev/schemas/common.schema.json",
+  "title": "Common",
+  "description": "Shared enums and value types referenced by every other Attest schema. Spec: docs/Attest_MVP_Spec_v0.2.md Appendix A.",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque stable identifier. Task/criterion/transaction/checkpoint ids are ULIDs in practice; this schema does not enforce a specific format."
+    },
+    "isoTimestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "Content-addressing hash used for criteria-set freezing (spec §5) and evidence artifacts (spec §6 evidence store)."
+    },
+    "unityGuid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "assetPath": {
+      "type": "string",
+      "description": "Project-relative path, forward slashes, always starting with Assets/ or Packages/.",
+      "pattern": "^(Assets|Packages)/"
+    },
+
+    "taskStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "understanding",
+        "inspecting",
+        "planning",
+        "implementing",
+        "compiling",
+        "compile_repair",
+        "structural_check",
+        "playing",
+        "observing",
+        "evaluating",
+        "repairing",
+        "reporting",
+        "success",
+        "needs_review",
+        "unstable",
+        "budget_exhausted",
+        "blocked",
+        "unsafe",
+        "cancelled"
+      ],
+      "description": "Stage/outcome union — spec §9 stages 1-11 plus §9.4 stop conditions."
+    },
+
+    "criterionType": {
+      "type": "string",
+      "enum": ["structural", "behavioral", "visual"]
+    },
+
+    "criterionResult": {
+      "type": "string",
+      "enum": ["pending", "pass", "fail", "unstable", "uncertain"],
+      "description": "`unstable` means the same criterion disagreed across repeated runs of the same replay (spec §8) and must never be reported as `pass`."
+    },
+
+    "actionSensitivity": {
+      "type": "string",
+      "enum": [
+        "read_only",
+        "reversible_in_task",
+        "broad_project_wide",
+        "destructive",
+        "external_executable",
+        "release_credentials"
+      ],
+      "description": "Maps 1:1 to the approval policy table, spec §11."
+    },
+
+    "evidenceKind": {
+      "type": "string",
+      "enum": [
+        "position_trace",
+        "health_trace",
+        "event_log",
+        "nunit_result",
+        "screenshot",
+        "console_log",
+        "diagnostic",
+        "serialized_snapshot",
+        "diff"
+      ]
+    },
+
+    "moneyUsd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Decimal USD, not cents — precision beyond 4 decimal places is not meaningful at current model pricing."
+    }
+  }
+}

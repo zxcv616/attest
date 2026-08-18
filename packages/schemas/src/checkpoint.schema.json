@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attest.dev/schemas/checkpoint.schema.json",
+  "title": "Checkpoint",
+  "description": "A recorded, restorable project state. Spec §11 git safety rules and §6 rollback. This is the ONLY rollback primitive — Unity's Undo stack is explicitly not durable and is never used as one (spec §7 transaction model note).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "taskId", "kind", "gitRef", "createdAt", "verification"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "taskId": { "$ref": "common.schema.json#/$defs/id" },
+    "kind": {
+      "type": "string",
+      "enum": ["pre_task", "post_transaction", "post_repair"],
+      "description": "pre_task is the one restored by full rollback; post_transaction/post_repair are intermediate points a repair loop can retarget without discarding the whole task."
+    },
+    "gitRef": {
+      "type": "string",
+      "description": "Commit hash on the task branch (attest/task-<id>, spec §11), not a ref name — refs move, hashes don't."
+    },
+    "preTaskBranch": {
+      "type": "string",
+      "description": "Set on the pre_task checkpoint only: the user's original branch name, restored on completion (spec §11)."
+    },
+    "dirtyWorktreeHandling": {
+      "type": "string",
+      "enum": ["none_was_clean", "committed_to_task_branch", "labeled_stash"],
+      "description": "Records which of the two permitted mechanisms (spec §11) preserved the user's uncommitted work, if any existed at task start."
+    },
+    "packageManifestState": {
+      "type": "object",
+      "description": "Snapshot of Packages/manifest.json before this checkpoint's mutations, so a Runtime-package-install line can be reverted precisely (spec §7 placement rule 1).",
+      "properties": {
+        "hadAttestReference": { "type": "boolean" },
+        "priorContent": { "type": "string" }
+      }
+    },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "description": "Spec §11: 'rollback verification is part of rollback... a rollback that isn't verified didn't happen.'",
+      "properties": {
+        "status": { "type": "string", "enum": ["not_yet_verified", "verified", "failed"] },
+        "gitStatusClean": { "type": "boolean" },
+        "reimportedWithoutErrors": { "type": "boolean" },
+        "guidSetMatches": { "type": "boolean" },
+        "verifiedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      }
+    }
+  }
+}

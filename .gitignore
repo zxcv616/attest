@@ -1,0 +1,46 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+dist/
+*.log
+npm-debug.log*
+.npm/
+
+# Daemon runtime data (task DB, evidence store, session/port files) —
+# local-first, never committed. Written into <projectPath>/.attest/ for
+# WHATEVER project the daemon is pointed at (packages/daemon/src/index.ts,
+# src/db.ts) — this is deliberately "**/", not a single fixed path, since
+# during testing that's fixtures/platformer-basic/.attest/, not
+# packages/daemon/.attest/. The narrower pattern here originally missed
+# that and would have committed a live sqlite file — caught before the
+# first commit.
+**/.attest/
+
+# Claude-flow / tooling local state — not project content.
+.claude-flow/
+
+# Unity — fixture and any user-provided project
+fixtures/**/Library/
+fixtures/**/Temp/
+fixtures/**/Obj/
+fixtures/**/Build/
+fixtures/**/Builds/
+fixtures/**/Logs/
+fixtures/**/UserSettings/
+fixtures/**/.vs/
+fixtures/**/*.csproj
+fixtures/**/*.sln
+fixtures/**/*.tmp
+
+# Unity package meta noise (asmdef .meta files ARE tracked; these are not)
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/

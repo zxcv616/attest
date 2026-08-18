@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attest.dev/schemas/task.schema.json",
+  "title": "Task",
+  "description": "Top-level task record — the daemon's durable state machine row (spec §6 'the daemon's task state machine is durable in SQLite and is the single source of truth'). One row per user request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "request", "status", "budgets", "createdAt"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "request": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The raw natural-language feature/fix request."
+    },
+    "featureFamily": {
+      "type": "string",
+      "enum": ["movement_cooldown", "repair", "collectible_internal"],
+      "description": "Spec §4 solo rescope: two shipped families plus one internal-only (collectible/score, used for M2 proof, not benchmarked or marketed)."
+    },
+    "status": { "$ref": "common.schema.json#/$defs/taskStatus" },
+
+    "projectPath": { "type": "string" },
+    "projectRevisionAtStart": {
+      "type": "string",
+      "description": "Git commit hash the pre_task checkpoint was cut from."
+    },
+
+    "criteriaSetId": { "$ref": "common.schema.json#/$defs/id" },
+    "checkpointIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/id" }
+    },
+    "transactionIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/id" }
+    },
+    "replayIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/id" }
+    },
+    "evidenceIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/id" }
+    },
+
+    "budgets": { "$ref": "#/$defs/budgets" },
+    "spend": { "$ref": "#/$defs/spend" },
+
+    "editorRestartCount": { "type": "integer", "minimum": 0, "default": 0 },
+
+    "approvals": {
+      "type": "array",
+      "description": "Log of every explicit user approval, spec §11 approval policy — one entry per action that required asking.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["actionSensitivity", "description", "decision", "at"],
+        "properties": {
+          "actionSensitivity": { "$ref": "common.schema.json#/$defs/actionSensitivity" },
+          "description": { "type": "string" },
+          "decision": { "type": "string", "enum": ["approved", "denied"] },
+          "at": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+        }
+      }
+    },
+
+    "dataDisclosure": {
+      "type": "array",
+      "description": "Spec §11: 'external model disclosure shows the exact context categories leaving the machine.'",
+      "items": { "type": "string" }
+    },
+
+    "determinismHazards": {
+      "type": "array",
+      "description": "Detected project-code determinism hazards (unseeded System.Random, DateTime.Now in gameplay code, etc.) — spec §8. Attest cannot fix these; the report must say so.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+    "completedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+  },
+
+  "$defs": {
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Defaults from spec §9.2, all user-overridable per task.",
+      "properties": {
+        "semanticRepairLoops": { "type": "integer", "minimum": 0, "default": 3 },
+        "compileFixAttemptsPerPhase": { "type": "integer", "minimum": 0, "default": 8 },
+        "wallClockMinutes": { "type": "number", "exclusiveMinimum": 0, "default": 20 },
+        "modelSpendUsd": { "$ref": "common.schema.json#/$defs/moneyUsd", "default": 3.0 },
+        "toolCalls": { "type": "integer", "minimum": 0, "default": 60 },
+        "filesTouched": { "type": "integer", "minimum": 0, "default": 12 },
+        "editorRestarts": { "type": "integer", "minimum": 0, "default": 2 }
+      }
+    },
+    "spend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "semanticRepairLoopsUsed": { "type": "integer", "minimum": 0, "default": 0 },
+        "compileFixAttemptsUsed": { "type": "integer", "minimum": 0, "default": 0 },
+        "wallClockMinutesUsed": { "type": "number", "minimum": 0, "default": 0 },
+        "modelSpendUsdUsed": { "$ref": "common.schema.json#/$defs/moneyUsd", "default": 0 },
+        "toolCallsUsed": { "type": "integer", "minimum": 0, "default": 0 },
+        "filesTouchedCount": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    }
+  }
+}

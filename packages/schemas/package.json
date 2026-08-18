@@ -1,0 +1,23 @@
+{
+  "name": "@attest/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "description": "JSON Schema — shared source of truth for Task/CriteriaSet/Transaction/Replay/Evidence/Checkpoint/RPC. The daemon and the Unity C# package both derive types from these; edit here first.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src/*.schema.json"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.2"
+  }
+}

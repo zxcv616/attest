@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attest.dev/schemas/evidence.schema.json",
+  "title": "Evidence",
+  "description": "One artifact in the evidence store (spec §6 'Evidence store', Appendix A). Content-addressed; immutable within a task.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "taskId", "kind", "contentHash", "criterionIds", "runIndex", "capturedAt"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "taskId": { "$ref": "common.schema.json#/$defs/id" },
+    "kind": { "$ref": "common.schema.json#/$defs/evidenceKind" },
+    "contentHash": { "$ref": "common.schema.json#/$defs/contentHash" },
+    "storagePath": {
+      "type": "string",
+      "description": "Path within the workspace-local content-addressed evidence store, relative to the task's evidence root."
+    },
+    "criterionIds": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^AC-[A-Z0-9]+-[0-9]{2,}$" },
+      "description": "Every mandatory criterion must have >=1 linked evidence artifact before a task can report success (spec §15 'Evidence completeness' launch gate)."
+    },
+    "runIndex": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Which replay run (of runs>=2, see replay.schema.json) produced this artifact."
+    },
+    "frame": { "type": "integer", "minimum": 0 },
+    "capturedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+    "confidence": {
+      "type": "string",
+      "enum": ["deterministic", "probabilistic", "subjective"]
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Kind-specific payload, e.g. {\"resolution\": [1280,720]} for screenshot, {\"nunitResultPath\": \"...\"} for nunit_result."
+    }
+  }
+}

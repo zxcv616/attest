@@ -1,0 +1,14 @@
+{
+  "name": "AttestFixture.Tests.Editor",
+  "rootNamespace": "AttestFixture.Tests.Editor",
+  "references": ["AttestFixture", "AttestFixture.Editor", "Unity.InputSystem"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

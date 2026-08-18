@@ -1,0 +1,16 @@
+{
+  "name": "com.attest.agent",
+  "version": "0.1.0",
+  "displayName": "Attest",
+  "description": "Attest — a self-verifying agentic Unity development system. This package is the Unity-side half of the daemon<->Editor connection: inspection, structured mutation, compile/Play Mode control, and (Runtime assembly) probes and capture. See docs/Attest_MVP_Spec_v0.2.md in the repo root, especially §6 'System architecture' and §7 'Unity package design'.",
+  "unity": "6000.3",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.inputsystem": "1.11.2",
+    "com.unity.test-framework": "1.4.5"
+  },
+  "keywords": ["attest", "agent", "automation", "testing"],
+  "author": {
+    "name": "Attest"
+  }
+}

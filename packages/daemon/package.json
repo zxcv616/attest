@@ -1,0 +1,25 @@
+{
+  "name": "@attest/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Attest agent daemon — RPC server, durable task state, git checkpoint/rollback, watchdog. Spec §6 'The connection model': the daemon is the server; Unity is the reconnecting client.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "node --experimental-strip-types src/index.ts"
+  },
+  "dependencies": {
+    "@attest/schemas": "0.0.0",
+    "ws": "^8.18.0",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13"
+  }
+}

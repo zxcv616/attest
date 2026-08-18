@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attest.dev/schemas/criteriaSet.schema.json",
+  "title": "CriteriaSet",
+  "description": "The acceptance-criteria contract, spec §5. Frozen and content-hashed on approval; immutable after implementation begins — see AcceptanceCriteriaContract.md in this package for the rules this schema enforces structurally.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["taskId", "criteria", "status"],
+  "properties": {
+    "taskId": { "$ref": "common.schema.json#/$defs/id" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "frozen"],
+      "description": "draft: agent may still edit. frozen: contentHash is set, criteria are immutable, evaluator may run."
+    },
+    "contentHash": {
+      "$ref": "common.schema.json#/$defs/contentHash",
+      "description": "Required when status=frozen. Computed over the canonical JSON of `criteria` (sorted keys, no whitespace) at approval time."
+    },
+    "approvedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+    "approvedBy": {
+      "type": "string",
+      "enum": ["user", "auto_low_risk"],
+      "description": "auto_low_risk is reserved for a future policy tier; MVP always requires \"user\"."
+    },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/criterion" }
+    }
+  },
+
+  "$defs": {
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "type", "observable", "expected", "mandatory",
+        "evidenceMethod", "confidence", "result"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^AC-[A-Z0-9]+-[0-9]{2,}$",
+          "description": "e.g. AC-DASH-01. Human-legible; referenced directly in reports and generated test names."
+        },
+        "type": { "$ref": "common.schema.json#/$defs/criterionType" },
+        "observable": {
+          "type": "string",
+          "description": "What is measured — e.g. \"player world-space displacement over 0.30s following Dash input\"."
+        },
+        "expected": {
+          "type": "object",
+          "description": "Shape depends on `type`; deliberately loose here and validated more strictly by the evaluator, since expected-value shapes vary widely (ranges, booleans, event sequences).",
+          "minProperties": 1
+        },
+        "tolerance": {
+          "type": "object",
+          "description": "Optional — required in practice for any numeric behavioral criterion. E.g. {\"kind\": \"absolute\", \"value\": 0.05}."
+        },
+        "mandatory": {
+          "type": "boolean",
+          "description": "false = advisory. Spec §5 rule: a task cannot have mandatory criteria that are ALL type=visual — enforced by validators, not by this schema alone (cross-field)."
+        },
+        "evidenceMethod": {
+          "type": "string",
+          "description": "e.g. \"position trace + replay event log\". Free text at MVP; becomes an enum once the probe/evidence taxonomy stabilizes past M2."
+        },
+        "negativeControlOf": {
+          "type": "string",
+          "pattern": "^AC-[A-Z0-9]+-[0-9]{2,}$",
+          "description": "If this criterion is the required negative control for a suppression criterion (spec §5, AC-DASH-02 example), points at that criterion's id."
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["deterministic", "probabilistic", "subjective"],
+          "description": "deterministic: hidden assertion decides it. probabilistic: statistical/threshold-based. subjective: routes to human review regardless of automated result."
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "runs"],
+          "properties": {
+            "status": { "$ref": "common.schema.json#/$defs/criterionResult" },
+            "runs": {
+              "type": "array",
+              "description": "Per-run outcome, spec §8 — at least 2 runs required before status can be pass/fail; disagreement forces status=unstable.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["runIndex", "seed", "outcome"],
+                "properties": {
+                  "runIndex": { "type": "integer", "minimum": 0 },
+                  "seed": { "type": "integer" },
+                  "outcome": { "type": "string", "enum": ["pass", "fail"] },
+                  "evidenceRefs": {
+                    "type": "array",
+                    "items": { "$ref": "common.schema.json#/$defs/id" }
+                  }
+                }
+              }
+            },
+            "rationale": { "type": "string" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "behavioral" } } },
+          "then": { "required": ["tolerance"] }
+        }
+      ]
+    }
+  }
+}

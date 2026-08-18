@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attest.dev/schemas/rpc.schema.json",
+  "title": "RPC envelope",
+  "description": "The wire protocol between the daemon (server, loopback-bound) and the Unity package (client, reconnecting). Spec §6 'The connection model' — this is the M0 centerpiece. The daemon is authoritative for task state; Unity holds none.",
+  "oneOf": [
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/helloAck" },
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" },
+    { "$ref": "#/$defs/heartbeat" }
+  ],
+  "$defs": {
+    "hello": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "unityVersion", "packageSchemaVersion"],
+      "description": "First message Unity sends on every connect/reconnect, including after a domain reload. If sessionToken/lastIdempotencyKey are present, this is a reconnect, not a fresh session.",
+      "properties": {
+        "type": { "const": "hello" },
+        "unityVersion": { "type": "string", "pattern": "^\\d{4}\\.\\d+\\.\\d+f\\d+$" },
+        "packageSchemaVersion": { "type": "string" },
+        "projectPath": { "type": "string" },
+        "sessionToken": {
+          "type": ["string", "null"],
+          "description": "Persisted in SessionState (survives domain reload) plus a workspace file (survives Editor restart). Null on a genuinely fresh connection."
+        },
+        "lastIdempotencyKey": {
+          "type": ["string", "null"],
+          "description": "The idempotencyKey of the last in-flight transaction before the disconnect, if any. Lets the daemon decide re-issue vs. confirm vs. rollback."
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["initial_connect", "domain_reload", "play_mode_enter", "play_mode_exit", "editor_restart"],
+          "description": "Why the client is (re)connecting — informs the daemon's reconciliation logic and is recorded for the task's editorRestartCount when reason=editor_restart."
+        }
+      }
+    },
+    "helloAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "sessionToken", "compatible"],
+      "properties": {
+        "type": { "const": "hello_ack" },
+        "sessionToken": { "type": "string" },
+        "compatible": {
+          "type": "boolean",
+          "description": "false if unityVersion/packageSchemaVersion fail the daemon's supported-matrix check (spec §4 'pinned Unity 6.3 patch matrix'). Connection is refused, not silently degraded."
+        },
+        "pendingReconciliation": {
+          "type": ["object", "null"],
+          "description": "Set when lastIdempotencyKey matched an in-flight transaction: tells Unity whether the daemon already has a result (confirm) or needs it retried (re_issue) or the checkpoint should be restored (rollback).",
+          "properties": {
+            "idempotencyKey": { "type": "string" },
+            "action": { "type": "string", "enum": ["confirm", "re_issue", "rollback"] }
+          }
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "method"],
+      "properties": {
+        "type": { "const": "request" },
+        "id": { "$ref": "common.schema.json#/$defs/id" },
+        "method": {
+          "type": "string",
+          "description": "One of the tool-surface names from spec §9, e.g. scene.apply_transaction, editor.enter_play_mode, test.run."
+        },
+        "params": { "type": "object" },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Required for any mutating method (spec §7). Omitted for read-only inspection calls."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "requestId", "ok"],
+      "properties": {
+        "type": { "const": "response" },
+        "requestId": { "$ref": "common.schema.json#/$defs/id" },
+        "ok": { "type": "boolean" },
+        "result": {},
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "retryable": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "at"],
+      "description": "Sent by Unity on an interval while healthy. Absence for longer than the watchdog's per-operation timeout (spec §6 'Editor lifecycle recovery') triggers kill + relaunch.",
+      "properties": {
+        "type": { "const": "heartbeat" },
+        "at": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "editorState": {
+          "type": "string",
+          "enum": ["idle", "compiling", "play_mode", "importing", "modal_blocked"]
+        }
+      }
+    }
+  }
+}

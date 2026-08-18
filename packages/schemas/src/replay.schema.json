@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attest.dev/schemas/replay.schema.json",
+  "title": "Replay",
+  "description": "A deterministic input timeline that compiles to a generated Play Mode test (spec §8 'Replays are generated Play Mode tests'). Frame-based, never wall-clock.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "taskId", "seed", "timebase", "steps", "generatedTestPath"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "taskId": { "$ref": "common.schema.json#/$defs/id" },
+    "seed": { "type": "integer" },
+
+    "timebase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["captureDeltaTime", "fixedDeltaTime"],
+      "description": "The determinism stack, spec §8. captureDeltaTime pins Time.captureDeltaTime so each rendered frame advances game time by a fixed amount regardless of wall clock.",
+      "properties": {
+        "captureDeltaTime": { "type": "number", "exclusiveMinimum": 0 },
+        "fixedDeltaTime": { "type": "number", "exclusiveMinimum": 0 },
+        "maximumDeltaTime": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    },
+
+    "generatedTestPath": {
+      "$ref": "common.schema.json#/$defs/assetPath",
+      "description": "e.g. Assets/AttestGenerated/Tests/AC_DASH_Replay.cs"
+    },
+
+    "runs": {
+      "type": "integer",
+      "minimum": 2,
+      "default": 2,
+      "description": "Spec §8: every criterion is evaluated across at least 2 runs; disagreement -> unstable, never pass."
+    }
+  },
+
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atFrame", "kind"],
+      "properties": {
+        "atFrame": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Frame-count based, never WaitForSeconds against wall clock (spec §8 determinism stack, rule 4)."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "input_action", "wait_frames", "assert_probe", "capture_screenshot",
+            "inject_event", "named_checkpoint"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "description": "Required when kind=input_action; an Input System action name resolved through the project's adapter (spec §6, §10 Adapters)."
+        },
+        "value": {},
+        "durationFrames": { "type": "integer", "minimum": 1 },
+        "label": {
+          "type": "string",
+          "description": "Required when kind IN (capture_screenshot, named_checkpoint) — becomes the named capture referenced by evidence and the demo evidence matrix."
+        }
+      }
+    }
+  }
+}
