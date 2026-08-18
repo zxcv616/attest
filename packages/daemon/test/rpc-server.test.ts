@@ -309,3 +309,43 @@ test("callUnity: a reconnect after a domain reload mid-call can find the ledger 
     await server.close();
   }
 });
+
+test("callUnity: socket closing mid-call rejects immediately, not after the full timeout (spec §6 — the scenario compilation-triggered domain reload creates)", async () => {
+  const server = new RpcServer({ supportedUnityVersions: ["6000.3.4f1"], supportedPackageSchemaVersions: ["0.1.0"] });
+  const { port } = await server.listen();
+  const { ws, sessionToken } = await connectAndHello(port);
+
+  const start = Date.now();
+  const inFlight = server.callUnity(sessionToken, "editor.wait_for_compilation", {}, { idempotencyKey: "idem_close", timeoutMs: 30_000 });
+
+  // No actAsUnityFor() — Unity never answers. Instead, close the socket,
+  // as a domain reload would, well before the 30s timeout would fire.
+  await new Promise((r) => setTimeout(r, 20));
+  ws.close();
+
+  await assert.rejects(() => inFlight, /connection closed/);
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed < 5000, `expected prompt rejection on socket close, took ${elapsed}ms (would be ~30000ms without the fix)`);
+  assert.equal(server.idempotency.lookup("idem_close")?.status, "failed");
+
+  await server.close();
+});
+
+test("callUnity: a socket closing does NOT reject pending requests belonging to a different session", async () => {
+  const server = new RpcServer({ supportedUnityVersions: ["6000.3.4f1"], supportedPackageSchemaVersions: ["0.1.0"] });
+  const { port } = await server.listen();
+  const a = await connectAndHello(port);
+  const b = await connectAndHello(port);
+  try {
+    actAsUnityFor(b.ws, () => ({ ok: true }));
+    const bCall = server.callUnity(b.sessionToken, "project.get_summary", {}, { timeoutMs: 2000 });
+
+    a.ws.close(); // unrelated session closing
+
+    const result = await bCall;
+    assert.deepEqual(result, { ok: true });
+  } finally {
+    b.ws.close();
+    await server.close();
+  }
+});

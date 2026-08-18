@@ -38,6 +38,7 @@ interface PendingUnityRequest {
   resolve: (result: unknown) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+  ws: WebSocket;
 }
 
 export interface CallUnityOptions {
@@ -115,6 +116,7 @@ export class RpcServer {
           reject(err);
         },
         timer,
+        ws: session.ws,
       });
 
       this.send(session.ws, {
@@ -159,6 +161,26 @@ export class RpcServer {
     ws.on("message", (raw) => {
       void this.handleMessage(ws, raw.toString());
     });
+    ws.on("close", () => this.handleSocketClosed(ws));
+  }
+
+  /**
+   * M1 §Phase 4: without this, a socket dropping mid-callUnity() (most
+   * commonly a compile-triggered domain reload — the exact scenario the
+   * compile monitor exists for) left the caller waiting out the full
+   * timeout (default 30s) even though the daemon knew immediately the
+   * connection was gone. Rejects only requests tied to THIS closed socket
+   * — not the whole pendingUnityRequests map — so a second, still-connected
+   * session (not expected in practice, but not structurally ruled out;
+   * see listSessionTokens) isn't affected by an unrelated disconnect.
+   */
+  private handleSocketClosed(ws: WebSocket): void {
+    for (const [id, pending] of this.pendingUnityRequests) {
+      if (pending.ws !== ws) continue;
+      clearTimeout(pending.timer);
+      this.pendingUnityRequests.delete(id);
+      pending.reject(new Error(`Unity connection closed before responding to request ${id}`));
+    }
   }
 
   private send(ws: WebSocket, message: unknown): void {
