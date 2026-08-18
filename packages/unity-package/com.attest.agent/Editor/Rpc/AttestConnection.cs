@@ -13,6 +13,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -197,7 +198,12 @@ namespace Attest.Editor.Rpc
                     } while (!result.EndOfMessage);
 
                     var json = Encoding.UTF8.GetString(ms.ToArray());
-                    HandleMessage(json);
+                    // Awaited, not fire-and-forget: the daemon issues one
+                    // request at a time (its task engine executes
+                    // transactions sequentially), so processing messages
+                    // in order — rather than letting a slow handler race a
+                    // later message — is both simpler and matches reality.
+                    await HandleMessageAsync(json);
                 }
             }
             catch (OperationCanceledException)
@@ -212,7 +218,7 @@ namespace Attest.Editor.Rpc
             }
         }
 
-        private static void HandleMessage(string json)
+        private static async Task HandleMessageAsync(string json)
         {
             var envelope = JsonConvert.DeserializeObject<EnvelopeEnvelope>(json);
             switch (envelope?.Type)
@@ -221,11 +227,19 @@ namespace Attest.Editor.Rpc
                     HandleHelloAck(json);
                     break;
                 case "response":
-                    // M1 TODO: dispatch to whatever issued the matching
-                    // request.id once the tool surface (scene.apply_transaction
-                    // etc.) exists on this side. For now, just observable via
-                    // LastResponseJson for manual inspection from AttestWindow.
+                    // The daemon calling INTO Unity is not a thing that
+                    // happens — Unity never issues a `request` of its own
+                    // (RpcServer's registerHandler/handleRequest path exists
+                    // for it structurally, but nothing on this side calls
+                    // it). A `response` arriving here would mean the daemon
+                    // sent one unprompted, which is a protocol violation;
+                    // kept observable via LastResponseJson rather than
+                    // silently dropped, in case that assumption is wrong.
                     LastResponseJson = json;
+                    Debug.LogWarning("[Attest] received an unexpected `response` — Unity never issues a `request`, so nothing should be answering one.");
+                    break;
+                case "request":
+                    await HandleIncomingRequest(json);
                     break;
                 default:
                     Debug.LogWarning($"[Attest] unhandled message type: {envelope?.Type}");
@@ -234,6 +248,57 @@ namespace Attest.Editor.Rpc
         }
 
         public static string LastResponseJson { get; private set; }
+
+        /// <summary>
+        /// M1 §Phase 1: the daemon asking Unity to do something. Sets the
+        /// last-idempotency-key BEFORE executing (spec §6) so a domain
+        /// reload mid-handler still reports the right key on the next
+        /// hello, and clears it after responding either way — a sent
+        /// response (success or failure) means this operation is no longer
+        /// "in flight" from Unity's side, regardless of outcome.
+        /// </summary>
+        private static async Task HandleIncomingRequest(string json)
+        {
+            var req = JsonConvert.DeserializeObject<RequestMessage>(json);
+
+            if (!string.IsNullOrEmpty(req.IdempotencyKey))
+            {
+                AttestSessionState.SetLastIdempotencyKey(req.IdempotencyKey);
+            }
+
+            object result = null;
+            RpcError error = null;
+
+            if (!AttestRequestDispatcher.TryGet(req.Method, out var handler))
+            {
+                error = new RpcError { Code = "unknown_method", Message = $"No handler registered for {req.Method}", Retryable = false };
+            }
+            else
+            {
+                try
+                {
+                    result = await handler(req.Params ?? new JObject());
+                }
+                catch (Exception e)
+                {
+                    error = new RpcError { Code = "handler_error", Message = e.Message, Retryable = false };
+                }
+            }
+
+            await SendAsync(new ResponseMessage
+            {
+                Type = "response",
+                RequestId = req.Id,
+                Ok = error == null,
+                Result = result,
+                Error = error,
+            });
+
+            if (!string.IsNullOrEmpty(req.IdempotencyKey))
+            {
+                AttestSessionState.ClearLastIdempotencyKey();
+            }
+        }
 
         private static void HandleHelloAck(string json)
         {

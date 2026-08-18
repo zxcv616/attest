@@ -22,18 +22,15 @@ npm-debug.log*
 # Claude-flow / tooling local state — not project content.
 .claude-flow/
 
-# Unity — fixture and any user-provided project
-fixtures/**/Library/
-fixtures/**/Temp/
-fixtures/**/Obj/
-fixtures/**/Build/
-fixtures/**/Builds/
-fixtures/**/Logs/
-fixtures/**/UserSettings/
-fixtures/**/.vs/
-fixtures/**/*.csproj
-fixtures/**/*.sln
-fixtures/**/*.tmp
+# Every fixture is its OWN git repository, not part of this one — spec §4
+# requires every Attest-managed project to be a real git repo, and the
+# daemon's checkpoint/rollback machinery needs that repo boundary to
+# actually mean something. If this repo also tracked fixture files, git
+# commands run with a fixture folder as cwd would silently walk up and
+# find THIS repo instead — meaning a "checkpoint" or "rollback" of a
+# fixture could touch Attest's own uncommitted source. See each fixture's
+# own .gitignore for what's excluded inside its repo.
+fixtures/*/
 
 # Unity package meta noise (asmdef .meta files ARE tracked; these are not)
 *.pidb.meta

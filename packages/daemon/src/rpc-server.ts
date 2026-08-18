@@ -11,12 +11,12 @@ import { IdempotencyLedger } from "./idempotency.ts";
  * all drop the socket as routine, not exceptional — recovery from that is
  * the hello/hello_ack handshake below, not anything socket-level.
  *
- * Request/response dispatch for the actual tool surface (scene.apply_transaction,
- * editor.enter_play_mode, ...) is M1 work — those methods don't exist until
- * the Unity-side implementation does. This server proves the envelope,
- * the version gate, and the reconnect/idempotency reconciliation, which is
- * the M0 bar (spec §12: "reconnect survives compile, Play Mode entry, and
- * Editor restart").
+ * M1 §Phase 1: the tool surface (scene.apply_transaction, editor.enter_play_mode,
+ * ...) is daemon-initiated — the daemon decides a transaction is needed and
+ * asks Unity to execute it, not the other way around. That's `callUnity()`
+ * below: send a `request` envelope, track it by id, resolve when the
+ * matching `response` comes back. `registerHandler`/`handleRequest` above
+ * handle the opposite (rare) direction, where Unity calls into the daemon.
  */
 
 export type RequestHandler = (params: unknown) => Promise<unknown> | unknown;
@@ -34,10 +34,26 @@ interface Session {
   ws: WebSocket;
 }
 
+interface PendingUnityRequest {
+  resolve: (result: unknown) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+export interface CallUnityOptions {
+  /** Required for any mutating method (spec §7). Omit for read-only inspection calls. */
+  idempotencyKey?: string;
+  /** Whether re-sending this exact call after a dropped connection is safe. Defaults to false (conservative) — spec §6 reconciliation treats "don't know" as "roll back," not "assume fine." */
+  retrySafe?: boolean;
+  timeoutMs?: number;
+}
+
 export class RpcServer {
   private wss: WebSocketServer | null = null;
   private sessions = new Map<string, Session>();
   private handlers = new Map<string, RequestHandler>();
+  private pendingUnityRequests = new Map<string, PendingUnityRequest>();
+  private nextRequestId = 0;
   readonly idempotency: IdempotencyLedger;
 
   private readonly opts: RpcServerOptions;
@@ -49,6 +65,66 @@ export class RpcServer {
 
   registerHandler(method: string, handler: RequestHandler): void {
     this.handlers.set(method, handler);
+  }
+
+  /** Every session currently connected, most-recently-connected last. In practice there's exactly one Unity Editor per daemon (per project), but the daemon doesn't assume that structurally. */
+  listSessionTokens(): string[] {
+    return [...this.sessions.keys()];
+  }
+
+  /**
+   * Sends `method`/`params` to the given Unity session as a `request`
+   * envelope and resolves with `result` once the matching `response`
+   * arrives (matched by request id — see handleUnityResponse). Rejects on
+   * timeout, on a `{ok: false}` response, or if the session isn't connected.
+   *
+   * If idempotencyKey is set, this wires into the same IdempotencyLedger
+   * the reconnect handshake reconciles against (spec §6) — begin() before
+   * sending, complete()/fail() on outcome — so a domain reload mid-call is
+   * something the NEXT hello can actually reason about, not just something
+   * this one call fails into the void on.
+   */
+  async callUnity(sessionToken: string, method: string, params?: unknown, opts: CallUnityOptions = {}): Promise<unknown> {
+    const session = this.sessions.get(sessionToken);
+    if (!session) {
+      throw new Error(`No active session: ${sessionToken}`);
+    }
+
+    const id = `req_${++this.nextRequestId}_${Date.now()}`;
+    const timeoutMs = opts.timeoutMs ?? 30_000;
+
+    if (opts.idempotencyKey) {
+      this.idempotency.begin(opts.idempotencyKey, { retrySafe: opts.retrySafe ?? false });
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingUnityRequests.delete(id);
+        const err = new Error(`Timed out after ${timeoutMs}ms waiting for Unity response to ${method} (id=${id})`);
+        if (opts.idempotencyKey) this.idempotency.fail(opts.idempotencyKey);
+        reject(err);
+      }, timeoutMs);
+
+      this.pendingUnityRequests.set(id, {
+        resolve: (result) => {
+          if (opts.idempotencyKey) this.idempotency.complete(opts.idempotencyKey, result);
+          resolve(result);
+        },
+        reject: (err) => {
+          if (opts.idempotencyKey) this.idempotency.fail(opts.idempotencyKey);
+          reject(err);
+        },
+        timer,
+      });
+
+      this.send(session.ws, {
+        type: "request",
+        id,
+        method,
+        ...(params !== undefined ? { params } : {}),
+        ...(opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
+      });
+    });
   }
 
   async listen(): Promise<{ port: number }> {
@@ -115,12 +191,31 @@ export class RpcServer {
       case "heartbeat":
         this.handleHeartbeat(msg as HeartbeatMessage);
         return;
-      default:
-        // hello_ack / response are server->client only; a client sending
-        // one is a protocol violation, but the schema already rejects
-        // anything not matching one of the five envelope shapes, so this
-        // branch is unreachable in practice — kept only as a defensive default.
+      case "response":
+        // Unity answering a callUnity() request (M1 §Phase 1). Previously
+        // fell through to the default no-op branch below and was silently
+        // dropped — every callUnity() call would have hung until timeout
+        // regardless of what Unity actually returned.
+        this.handleUnityResponse(msg as ResponseMessage);
         return;
+      default:
+        // hello_ack is server->client only; a client sending one is a
+        // protocol violation, but the schema already rejects anything not
+        // matching one of the five envelope shapes, so this is unreachable
+        // in practice — kept only as a defensive default.
+        return;
+    }
+  }
+
+  private handleUnityResponse(res: ResponseMessage): void {
+    const pending = this.pendingUnityRequests.get(res.requestId);
+    if (!pending) return; // already timed out, or a stray/duplicate — nothing to resolve
+    clearTimeout(pending.timer);
+    this.pendingUnityRequests.delete(res.requestId);
+    if (res.ok) {
+      pending.resolve(res.result);
+    } else {
+      pending.reject(new Error(res.error?.message ?? `Unity request ${res.requestId} failed`));
     }
   }
 
@@ -201,4 +296,11 @@ interface HeartbeatMessage {
   type: "heartbeat";
   at: string;
   editorState?: string;
+}
+interface ResponseMessage {
+  type: "response";
+  requestId: string;
+  ok: boolean;
+  result?: unknown;
+  error?: { code?: string; message?: string; retryable?: boolean };
 }

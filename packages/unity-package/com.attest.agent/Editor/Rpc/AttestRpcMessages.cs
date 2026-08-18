@@ -10,8 +10,8 @@
 // proven artifact, until someone with Unity 6.3 LTS opens this package and
 // it compiles clean.
 
-using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Attest.Editor.Rpc
 {
@@ -53,7 +53,7 @@ namespace Attest.Editor.Rpc
         [JsonProperty("type")] public string Type = "request";
         [JsonProperty("id")] public string Id;
         [JsonProperty("method")] public string Method;
-        [JsonProperty("params")] public Dictionary<string, object> Params;
+        [JsonProperty("params")] public JObject Params;
         [JsonProperty("idempotencyKey")] public string IdempotencyKey;
     }
 
